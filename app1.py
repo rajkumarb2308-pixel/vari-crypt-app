@@ -6,7 +6,7 @@ from mapping_engine import MappingEngine
 crypto = CryptoEngine()
 mapper = MappingEngine()
 
-SERVER_URL = "http://127.0.0.1:8000"
+SERVER_URL = "https://vari-crypt-app.onrender.com"
 
 st.set_page_config(page_title="Vari-Crypt", page_icon="🔐", layout="centered")
 
@@ -115,4 +115,5 @@ elif operation == "Retrieve & Decrypt":
         pwd_manual = st.text_input("Password (Manual)", type="password", key="p2")
         if st.button("Decrypt Manually"):
             if manual_symbols and pwd_manual:
+
                 process_decryption(manual_symbols.strip(), pwd_manual)
