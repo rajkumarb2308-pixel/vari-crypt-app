@@ -5,3 +5,4 @@ pycryptodome
 argon2-cffi
 requests
 pymongo
+dnspython
