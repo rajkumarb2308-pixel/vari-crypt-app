@@ -1,0 +1,7 @@
+streamlit
+fastapi
+uvicorn
+pycryptodome
+argon2-cffi
+requests
+pymongo
