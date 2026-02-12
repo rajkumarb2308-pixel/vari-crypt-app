@@ -11,7 +11,7 @@ crypto = CryptoEngine()
 mapper = MappingEngine()
 stego = StegoEngine()
 
-SERVER_URL = "https://vari-crypt-server.onrender.com" # Ensure no trailing slash
+SERVER_URL = "https://vari-crypt-server.onrender.com"  # Ensure no trailing slash
 
 # ==========================================
 # 🪐 CINEMATIC INTERSTELLAR UI
@@ -21,7 +21,7 @@ st.set_page_config(page_title="Vari-Crypt: Interstellar", page_icon="🪐", layo
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] { background: black; overflow: hidden; }
-    
+
     /* Realistic Accretion Disk (Gargantua) */
     [data-testid="stAppViewContainer"]::after {
         content: ""; position: fixed; top: 50%; left: 50%; width: 150vw; height: 100vh;
@@ -67,7 +67,8 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("VARI-CRYPT")
-st.markdown("<p style='letter-spacing: 7px; color: #95a5a6; font-size: 11px;'>COGNITIVE DATA TRANSMISSION</p>", unsafe_allow_html=True)
+st.markdown("<p style='letter-spacing: 7px; color: #95a5a6; font-size: 11px;'>COGNITIVE DATA TRANSMISSION</p>",
+            unsafe_allow_html=True)
 
 operation = st.sidebar.radio("SYSTEM NAVIGATION", ["📡 ENCODE SIGNAL", "📥 DECODE SIGNAL"])
 
@@ -78,7 +79,8 @@ if operation == "📡 ENCODE SIGNAL":
     st.subheader("// DATA INPUT")
     text_input = st.text_area("MESSAGE PAYLOAD")
     password_input = st.text_input("AUTHORIZATION KEY", type="password")
-    mode = st.selectbox("OBFUSCATION PROTOCOL", ["SYMBOLIC MAPPING", "STEGANOGRAPHY (UPLOAD)", "STEGANOGRAPHY (AUTO-GENERATE)"])
+    mode = st.selectbox("OBFUSCATION PROTOCOL",
+                        ["SYMBOLIC MAPPING", "STEGANOGRAPHY (UPLOAD)", "STEGANOGRAPHY (AUTO-GENERATE)"])
 
     cover_file = None
     if mode == "STEGANOGRAPHY (UPLOAD)":
@@ -92,7 +94,7 @@ if operation == "📡 ENCODE SIGNAL":
                 # AES-256 EAX Core
                 salt, nonce, tag, ciphertext = crypto.encrypt_data(text_input, password_input)
                 full_payload = salt + nonce + tag + ciphertext
-                
+
                 if mode == "SYMBOLIC MAPPING":
                     payload_to_send = mapper.map_ciphertext(full_payload, password_input)
                     st.code(payload_to_send)
@@ -101,14 +103,15 @@ if operation == "📡 ENCODE SIGNAL":
                     payload_to_send = full_payload.hex()
                     stego_bytes = stego.hide_data(cover_file, payload_to_send, False)
                     st.download_button("DOWNLOAD FILE", stego_bytes, "carrier.png")
-                else: # AUTO-GENERATE
+                else:  # AUTO-GENERATE
                     payload_to_send = full_payload.hex()
                     stego_bytes = stego.hide_data(None, payload_to_send, True)
                     st.image(stego_bytes, caption="SYSTEM ARTIFACT", width=300)
                     st.download_button("DOWNLOAD ARTIFACT", stego_bytes, "cosmic_artifact.png")
 
                 # Cloud Synchronization
-                res = requests.post(f"{SERVER_URL}/send", json={"encrypted_payload": {"visual_data": payload_to_send}}, timeout=60)
+                res = requests.post(f"{SERVER_URL}/send", json={"encrypted_payload": {"visual_data": payload_to_send}},
+                                    timeout=60)
                 st.info(f"LINK ESTABLISHED. MISSION ID: {res.json().get('msg_id')}")
             except Exception as e:
                 st.error(f"FAILURE: {e}")
@@ -119,7 +122,7 @@ if operation == "📡 ENCODE SIGNAL":
 else:
     st.subheader("// SIGNAL RECEPTION")
     st.warning("⚠️ CRITICAL: Cloud signals self-destruct immediately upon extraction.")
-    
+
     # Fully Flexible Decryption Options
     method = st.radio("DECODE SOURCE", ["CLOUD ID (PULL & PURGE)", "MANUAL SYMBOLS", "CARRIER FILE (STEGO)"])
     password = st.text_input("AUTHORIZATION KEY", type="password")
@@ -132,19 +135,24 @@ else:
                 if res.status_code == 200:
                     raw_data = res.json()['visual_data']
                     # Auto-detect Symbols vs Hex
-                    full_bytes = mapper.unmap_ciphertext(raw_data, password) if any(c in raw_data for c in "ΑΒΓΔ") else bytes.fromhex(raw_data)
-                    st.success(f"RECOVERED: {crypto.decrypt_data(full_bytes[:16], full_bytes[16:32], full_bytes[32:48], full_bytes[48:], password)}")
+                    full_bytes = mapper.unmap_ciphertext(raw_data, password) if any(
+                        c in raw_data for c in "ΑΒΓΔ") else bytes.fromhex(raw_data)
+                    st.success(
+                        f"RECOVERED: {crypto.decrypt_data(full_bytes[:16], full_bytes[16:32], full_bytes[32:48], full_bytes[48:], password)}")
                 else:
                     st.error("SIGNAL LOST: Data was previously read or has expired.")
-            except Exception as e: st.error(f"DECODE ERROR: {e}")
+            except Exception as e:
+                st.error(f"DECODE ERROR: {e}")
 
     elif method == "MANUAL SYMBOLS":
         sym_input = st.text_area("PASTE SYMBOLS")
         if st.button("DECODE SYMBOLS"):
             try:
                 full_bytes = mapper.unmap_ciphertext(sym_input, password)
-                st.success(f"RECOVERED: {crypto.decrypt_data(full_bytes[:16], full_bytes[16:32], full_bytes[32:48], full_bytes[48:], password)}")
-            except Exception as e: st.error(f"ERROR: {e}")
+                st.success(
+                    f"RECOVERED: {crypto.decrypt_data(full_bytes[:16], full_bytes[16:32], full_bytes[32:48], full_bytes[48:], password)}")
+            except Exception as e:
+                st.error(f"ERROR: {e}")
 
     elif method == "CARRIER FILE (STEGO)":
         steg_file = st.file_uploader("UPLOAD CARRIER PNG", type=["png"])
@@ -152,5 +160,7 @@ else:
             try:
                 hex_data = stego.reveal_data(steg_file)
                 full_bytes = bytes.fromhex(hex_data)
-                st.success(f"RECOVERED: {crypto.decrypt_data(full_bytes[:16], full_bytes[16:32], full_bytes[32:48], full_bytes[48:], password)}")
-            except Exception as e: st.error(f"EXTRACTION FAILED: {e}")
+                st.success(
+                    f"RECOVERED: {crypto.decrypt_data(full_bytes[:16], full_bytes[16:32], full_bytes[32:48], full_bytes[48:], password)}")
+            except Exception as e:
+                st.error(f"EXTRACTION FAILED: {e}")
