@@ -50,7 +50,7 @@ if operation == "Encrypt & Send":
             response = requests.post(
                 f"{SERVER_URL}/send",
                 json={"encrypted_payload": {"visual_data": visual_cipher}},
-                timeout=10
+                timeout=60
             )
 
             if response.status_code == 200:
@@ -102,7 +102,7 @@ elif operation == "Retrieve & Decrypt":
         if st.button("Fetch & Decrypt ID"):
             if msg_id and pwd_cloud:
                 try:
-                    res = requests.get(f"{SERVER_URL}/receive/{msg_id}", timeout=10)
+                    res = requests.get(f"{SERVER_URL}/receive/{msg_id}", timeout=60)
                     if res.status_code == 200:
                         process_decryption(res.json()["visual_data"], pwd_cloud)
                     else:
@@ -117,3 +117,4 @@ elif operation == "Retrieve & Decrypt":
             if manual_symbols and pwd_manual:
 
                 process_decryption(manual_symbols.strip(), pwd_manual)
+
