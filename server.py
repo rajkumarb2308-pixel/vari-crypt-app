@@ -1,68 +1,52 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
+from pymongo import MongoClient
 import uuid
 import os
-from pymongo import MongoClient
+from datetime import datetime
 
-app = FastAPI(title="Vari-Crypt Secure Cloud Server")
+app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# REPLACE THIS with your free MongoDB Atlas URI
-MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://rajkumarb2308_db_user:rgfobjMajgiVhxpd@aura-crypt.innejxe.mongodb.net/?appName=aura-crypt")
-
-db_mode = "memory"
-messages_collection = {}
-
-# Try Cloud DB, Fallback to Local Memory for testing
-try:
-    if "YOUR_MONGO_URI_HERE" not in MONGO_URI:
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
-        client.admin.command('ping')  # Test connection
-        db = client["varicrypt_db"]
-        messages_collection = db["messages"]
-        db_mode = "cloud"
-        print("✅ Connected to MongoDB Cloud!")
-except Exception as e:
-    print(f"⚠️ Cloud DB Failed: {e}. Falling back to Local Memory Mode.")
+# MongoDB Configuration
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client['vari_crypt_db']
+collection = db['messages']
 
 
-class Message(BaseModel):
-    encrypted_payload: dict
-
-
-@app.get("/")
-def home():
-    return {"status": f"Vari-Crypt Server is Live (Mode: {db_mode})"}
+def generate_id():
+    return str(uuid.uuid4())[:8]
 
 
 @app.post("/send")
-def send_message(message: Message):
-    message_id = str(uuid.uuid4())[:8]
-    document = {"message_id": message_id, "payload": message.encrypted_payload}
+async def send_data(payload: dict):
+    try:
+        msg_id = generate_id()
+        visual_data = payload["encrypted_payload"]["visual_data"]
 
-    if db_mode == "cloud":
-        messages_collection.insert_one(document)
+        # This record now includes the 'createdAt' field for auto-deletion
+        new_record = {
+            "msg_id": msg_id,
+            "visual_data": visual_data,
+            "createdAt": datetime.utcnow()  # REQUIRED for TTL index
+        }
+
+        collection.insert_one(new_record)
+        return {"msg_id": msg_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/receive/{msg_id}")
+async def receive_data(msg_id: str):
+    # Single-Use Logic: Finds and DELETES immediately upon extraction
+    record = collection.find_one_and_delete({"msg_id": msg_id})
+
+    if record:
+        return {"visual_data": record["visual_data"]}
     else:
-        messages_collection[message_id] = document
-
-    return {"success": True, "message_id": message_id}
+        raise HTTPException(status_code=404, detail="Signal lost: Data extracted or expired.")
 
 
-@app.get("/receive/{message_id}")
-def receive_message(message_id: str):
-    if db_mode == "cloud":
-        document = messages_collection.find_one({"message_id": message_id})
-    else:
-        document = messages_collection.get(message_id)
-
-    if not document:
-        raise HTTPException(status_code=404, detail="Message not found.")
-    return document["payload"]
+@app.get("/")
+def health_check():
+    return {"status": "Active", "mode": "Cloud"}
