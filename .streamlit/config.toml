@@ -1,6 +1,26 @@
 [theme]
-primaryColor = "#00d4ff"
+# The primary accent color (Interstellar Tactical Orange)
+primaryColor = "#f1c40f"
+
+# The deep void background color
 backgroundColor = "#000000"
-secondaryBackgroundColor = "#1B2735"
-textColor = "#e0f7ff"
+
+# Secondary background for the Endurance-style sidebar
+secondaryBackgroundColor = "#0a0a0c"
+
+# High-contrast starlight text color
+textColor = "#ecf0f1"
+
+# Monospace font for a technical, computer-terminal feel
 font = "monospace"
+
+[server]
+# Optimized for cloud deployment (Render/Streamlit Cloud)
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+
+[client]
+# Disables the 'Made with Streamlit' footer for a professional cinematic look
+toolbarMode = "minimal"
+showErrorDetails = false
