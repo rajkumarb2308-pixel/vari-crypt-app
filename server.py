@@ -6,7 +6,7 @@ from datetime import datetime
 
 app = FastAPI()
 
-# MongoDB Configuration
+# MongoDB Configuration - Ensure MONGO_URI is in Render Environment Variables
 MONGO_URI = os.getenv("MONGO_URI") 
 client = MongoClient(MONGO_URI)
 db = client['varicrypt_db']
@@ -21,7 +21,7 @@ async def send_data(payload: dict):
         msg_id = generate_id()
         visual_data = payload["encrypted_payload"]["visual_data"]
         
-        # Adding 'createdAt' field to trigger your MongoDB TTL Index
+        # 'createdAt' triggers the MongoDB TTL index for auto-deletion
         new_record = {
             "msg_id": msg_id,
             "visual_data": visual_data,
@@ -35,14 +35,12 @@ async def send_data(payload: dict):
 
 @app.get("/receive/{msg_id}")
 async def receive_data(msg_id: str):
-    # ATOMIC OPERATION: Finds the record and deletes it immediately.
-    # This fulfills the "Extract Only Once" requirement.
+    # find_one_and_delete ensures the record is erased the moment it is read
     record = collection.find_one_and_delete({"msg_id": msg_id})
     
     if record:
         return {"visual_data": record["visual_data"]}
     else:
-        # Triggers if the ID was already used or 3 days have passed
         raise HTTPException(status_code=404, detail="Signal lost: Data extracted or expired.")
 
 @app.get("/")
