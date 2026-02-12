@@ -6,3 +6,5 @@ argon2-cffi
 requests
 pymongo
 dnspython
+Pillow
+stegano
