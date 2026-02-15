@@ -1,216 +1,111 @@
-# ==================================
-# 🌌 VARI-CRYPT: EVENT HORIZON (V2 JWT)
-# ==================================
-
 import streamlit as st
 import requests
-from crypto_engine import CryptoEngine
-from mapping_engine import MappingEngine
-from stego_engine import StegoEngine
-from audio_engine import AudioStego
 
-# ==============================
-# 🔗 BACKEND CONFIG
-# ==============================
-SERVER_URL = "https://vari-crypt-app.onrender.com"
-REQUEST_TIMEOUT = 60  # Render cold start safe
+# 🔥 IMPORTANT: Replace with your Render backend URL
+API_URL = "https://your-backend-name.onrender.com"
 
-# ==============================
-# 🚀 ENGINE INITIALIZATION
-# ==============================
-if "engines_loaded" not in st.session_state:
-    st.session_state.crypto = CryptoEngine()
-    st.session_state.mapper = MappingEngine()
-    st.session_state.stego = StegoEngine()
-    st.session_state.audio_stego = AudioStego()
-    st.session_state.engines_loaded = True
+st.set_page_config(page_title="Aura Crypt", layout="centered")
 
-# ==============================
-# 🎨 PAGE CONFIG
-# ==============================
-st.set_page_config(
-    page_title="Vari-Crypt: Event Horizon",
-    page_icon="🌌",
-    layout="wide"
-)
-st.title("VARI-CRYPT: EVENT HORIZON")
+st.title("🔐 Aura Crypt Authentication System")
 
-# ==============================
-# 🔐 SESSION STATE INIT
-# ==============================
+# ---------------- SESSION STATE ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-if "token" not in st.session_state:
-    st.session_state.token = None
-
-# ==========================================
-# 🔐 LOGIN / REGISTER
-# ==========================================
-if not st.session_state.logged_in:
-
-    col1, col2, col3 = st.columns([1, 2, 1])
-
-    with col2:
-        tab1, tab2 = st.tabs(["🚀 LOGIN", "📝 REGISTER"])
-
-        # ================= LOGIN =================
-        with tab1:
-            l_id = st.text_input("PILOT ID")
-            l_pw = st.text_input("ACCESS CODE", type="password")
-
-            if st.button("INITIATE DOCKING"):
-                if not l_id or not l_pw:
-                    st.warning("Please enter credentials.")
-                else:
-                    try:
-                        res = requests.post(
-                            f"{SERVER_URL}/login",
-                            json={"identifier": l_id, "password": l_pw},
-                            timeout=REQUEST_TIMEOUT
-                        )
-
-                        if res.status_code == 200:
-                            token = res.json()["access_token"]
-                            st.session_state.token = token
-                            st.session_state.logged_in = True
-                            st.session_state.user_email = l_id
-                            st.success("ACCESS GRANTED")
-                            st.rerun()
-                        else:
-                            st.error(res.json().get("detail", res.text))
-
-                    except requests.exceptions.Timeout:
-                        st.error("Server waking up... please wait 30-40 seconds and try again.")
-                    except Exception as e:
-                        st.error(f"Server error: {e}")
-
-        # ================= REGISTER =================
-        with tab2:
-            r_id = st.text_input("NEW PILOT ID")
-            r_pw = st.text_input("SET ACCESS CODE", type="password")
-
-            if st.button("CREATE IDENTITY"):
-                if not r_id or not r_pw:
-                    st.warning("Please enter details.")
-                else:
-                    try:
-                        res = requests.post(
-                            f"{SERVER_URL}/register",
-                            json={"identifier": r_id, "password": r_pw},
-                            timeout=REQUEST_TIMEOUT
-                        )
-
-                        if res.status_code == 200:
-                            st.success("IDENTITY ESTABLISHED. Please login.")
-                        else:
-                            st.error(res.json().get("detail", res.text))
-
-                    except requests.exceptions.Timeout:
-                        st.error("Server waking up... please wait and try again.")
-                    except Exception as e:
-                        st.error(f"Server error: {e}")
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
 
 
-# ==========================================
-# 🌌 MAIN APPLICATION (JWT PROTECTED)
-# ==========================================
-else:
+# ---------------- REGISTER FUNCTION ----------------
+def register_user(username, email, password):
+    try:
+        response = requests.post(
+            f"{API_URL}/register",
+            json={
+                "username": username,
+                "email": email,
+                "password": password
+            }
+        )
+        return response
+    except Exception as e:
+        return None
 
-    headers = {
-        "Authorization": f"Bearer {st.session_state.token}"
-    }
 
-    with st.sidebar:
-        st.markdown(f"### 👨‍🚀 PILOT: `{st.session_state.user_email}`")
-        operation = st.radio("NAVIGATION", ["📡 ENCODE SIGNAL", "📥 DECODE SIGNAL"])
+# ---------------- LOGIN FUNCTION ----------------
+def login_user(email, password):
+    try:
+        response = requests.post(
+            f"{API_URL}/login",
+            json={
+                "email": email,
+                "password": password
+            }
+        )
+        return response
+    except Exception as e:
+        return None
 
-        if st.button("LOGOUT / EJECT"):
-            st.session_state.logged_in = False
-            st.session_state.token = None
-            st.rerun()
 
-    # ==========================================
-    # 📡 ENCODE SIGNAL
-    # ==========================================
-    if operation == "📡 ENCODE SIGNAL":
+# ---------------- MAIN UI ----------------
+menu = st.sidebar.selectbox("Select Option", ["Login", "Register"])
 
-        st.subheader("// GENERATE SECURE TRANSMISSION")
+# ================= REGISTER =================
+if menu == "Register":
 
-        msg = st.text_area("PAYLOAD DATA (MAX 20 WORDS)")
-        pwd = st.text_input("ENCRYPTION KEY", type="password")
+    st.subheader("Create New Account")
 
-        if st.button("SEND SIGNAL"):
+    username = st.text_input("Username")
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
 
-            if not msg or not pwd:
-                st.warning("Message and key required.")
+    if st.button("Register"):
+        if username and email and password:
+            response = register_user(username, email, password)
+
+            if response is None:
+                st.error("❌ Cannot connect to server")
+            elif response.status_code == 200:
+                st.success("✅ Registered Successfully!")
             else:
-                try:
-                    # Encrypt
-                    s, n, t, c = st.session_state.crypto.encrypt_data(msg, pwd)
-                    full_hex = (s + n + t + c).hex()
+                st.error(response.json().get("detail", "Registration Failed"))
+        else:
+            st.warning("⚠ Please fill all fields")
 
-                    # Send to server (JWT protected)
-                    res = requests.post(
-                        f"{SERVER_URL}/send",
-                        json={"visual_data": full_hex},
-                        headers=headers,
-                        timeout=REQUEST_TIMEOUT
-                    )
 
-                    if res.status_code == 200:
-                        st.success(f"MISSION ID: {res.json()['msg_id']}")
-                    elif res.status_code == 401:
-                        st.error("Session expired. Please login again.")
-                        st.session_state.logged_in = False
-                        st.rerun()
-                    else:
-                        st.error(res.json().get("detail", res.text))
+# ================= LOGIN =================
+elif menu == "Login":
 
-                except Exception as e:
-                    st.error(f"Encryption failed: {e}")
+    st.subheader("Login to Your Account")
 
-    # ==========================================
-    # 📥 DECODE SIGNAL
-    # ==========================================
-    else:
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
 
-        st.subheader("// RECOVER SIGNAL")
+    if st.button("Login"):
+        if email and password:
+            response = login_user(email, password)
 
-        mission_id = st.text_input("MISSION ID")
-        decrypt_key = st.text_input("DECRYPT KEY", type="password")
-
-        if st.button("PULL DATA"):
-
-            if not mission_id:
-                st.warning("Enter Mission ID")
+            if response is None:
+                st.error("❌ Cannot connect to server")
+            elif response.status_code == 200:
+                st.session_state.logged_in = True
+                st.session_state.user_email = email
+                st.success("✅ Login Successful!")
+                st.rerun()
             else:
-                try:
-                    res = requests.get(
-                        f"{SERVER_URL}/receive/{mission_id}",
-                        headers=headers,
-                        timeout=REQUEST_TIMEOUT
-                    )
+                st.error(response.json().get("detail", "Login Failed"))
+        else:
+            st.warning("⚠ Please fill all fields")
 
-                    if res.status_code == 200:
-                        extracted_hex = res.json()["visual_data"]
-                        b = bytes.fromhex(extracted_hex)
 
-                        decrypted = st.session_state.crypto.decrypt_data(
-                            b[:16], b[16:32], b[32:48], b[48:], decrypt_key
-                        )
+# ================= AFTER LOGIN =================
+if st.session_state.logged_in:
+    st.sidebar.success(f"Logged in as {st.session_state.user_email}")
+    
+    st.subheader("🎉 Welcome to Aura Crypt!")
+    st.write("You are successfully logged in.")
 
-                        st.success(f"🔓 RECOVERED: {decrypted}")
-                        st.balloons()
-
-                    elif res.status_code == 401:
-                        st.error("Session expired. Please login again.")
-                        st.session_state.logged_in = False
-                        st.rerun()
-                    else:
-                        st.error(res.json().get("detail", res.text))
-
-                except requests.exceptions.Timeout:
-                    st.error("Server waking up... please retry.")
-                except Exception as e:
-                    st.error(f"Error: {e}")
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.user_email = None
+        st.rerun()
