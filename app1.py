@@ -16,7 +16,7 @@ if 'engines_loaded' not in st.session_state:
     st.session_state.audio_stego = AudioStego()
     st.session_state.engines_loaded = True
 
-SERVER_URL = "http://127.0.0.1:8000"
+SERVER_URL = "mongodb+srv://rajkumarb2308_db_user:rgfobjMajgiVhxpd@aura-crypt.innejxe.mongodb.net/?appName=aura-crypt"
 
 # ==========================================
 # 🌌 COSMIC CLIFFS: STATIC GLASS EDITION
@@ -267,3 +267,4 @@ else:
                     st.error("ACCESS DENIED: INVALID KEY OR CORRUPTED SIGNAL.")
             except Exception as e:
                 st.error("DECRYPTION ERROR: DATA INTEGRITY COMPROMISED.")
+
