@@ -1,85 +1,90 @@
-import os
-import bcrypt
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+from passlib.context import CryptContext
 from pymongo import MongoClient
+import os
 
+# -----------------------------
+# App Initialization
+# -----------------------------
 app = FastAPI()
 
-# CORS
+# Enable CORS (important for frontend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # change to your frontend URL in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# MongoDB Connection
-MONGO_URI = os.getenv("MONGO_URI")
+# -----------------------------
+# Database Setup
+# -----------------------------
+MONGO_URL = os.getenv("MONGO_URL")
+if not MONGO_URL:
+    raise Exception("MONGO_URL not set in environment variables")
 
-if not MONGO_URI:
-    raise Exception("MONGO_URI not set")
+client = MongoClient(MONGO_URL)
+db = client["aura_crypt"]
+users_collection = db["users"]
 
-try:
-    client = MongoClient(MONGO_URI)
-    db = client["aura_crypt"]   # 🔥 Force DB explicitly
-    users_collection = db["users"]
-    print("✅ MongoDB Connected")
-except Exception as e:
-    print("❌ MongoDB Connection Failed:", e)
-    raise e
+# -----------------------------
+# Password Hashing
+# -----------------------------
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
+# -----------------------------
+# Models
+# -----------------------------
 class UserRegister(BaseModel):
     username: str
-    email: str
+    email: EmailStr
     password: str
-
 
 class UserLogin(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
+# -----------------------------
+# Routes
+# -----------------------------
 
 @app.get("/")
-def home():
-    return {"message": "Server is running 🚀"}
-
+def root():
+    return {"message": "Aura Crypt API is running successfully 🚀"}
 
 @app.post("/register")
 def register(user: UserRegister):
-    try:
-        if users_collection.find_one({"email": user.email}):
-            raise HTTPException(status_code=400, detail="Email already exists")
+    # Check if email already exists
+    if users_collection.find_one({"email": user.email}):
+        raise HTTPException(status_code=400, detail="Email already registered")
 
-        hashed_pw = bcrypt.hashpw(user.password.encode(), bcrypt.gensalt())
+    hashed_password = pwd_context.hash(user.password)
 
-        users_collection.insert_one({
-            "username": user.username,
-            "email": user.email,
-            "password": hashed_pw
-        })
+    users_collection.insert_one({
+        "username": user.username,
+        "email": user.email,
+        "password": hashed_password
+    })
 
-        return {"message": "Registered successfully"}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return {
+        "status": "success",
+        "message": "User registered successfully"
+    }
 
 @app.post("/login")
 def login(user: UserLogin):
-    try:
-        existing_user = users_collection.find_one({"email": user.email})
+    db_user = users_collection.find_one({"email": user.email})
 
-        if not existing_user:
-            raise HTTPException(status_code=400, detail="Invalid credentials")
+    if not db_user:
+        raise HTTPException(status_code=400, detail="Invalid email or password")
 
-        if not bcrypt.checkpw(user.password.encode(), existing_user["password"]):
-            raise HTTPException(status_code=400, detail="Invalid credentials")
+    if not pwd_context.verify(user.password, db_user["password"]):
+        raise HTTPException(status_code=400, detail="Invalid email or password")
 
-        return {"message": "Login successful"}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "status": "success",
+        "message": "Login successful"
+    }
