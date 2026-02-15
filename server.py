@@ -26,7 +26,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # -----------------------------
 # Database Connection (Safe)
 # -----------------------------
-MONGO_URL = os.getenv("MONGO_URL")
+MONGO_URL = os.getenv("mongodb+srv://rajkumarb2308_db_user:NEW_PASSWORD@aura-crypt.innejxe.mongodb.net/aura_crypt?retryWrites=true&w=majority")
 
 if not MONGO_URL:
     raise Exception("MONGO_URL environment variable not set")
@@ -110,3 +110,4 @@ def login(user: UserLogin):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
