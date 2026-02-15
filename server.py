@@ -23,7 +23,7 @@ app.add_middleware(
 # ⚠️ DATABASE CONNECTION ⚠️
 # For local testing, you can paste your string here.
 # For production (Render), use os.getenv("MONGO_URI") to keep it safe.
-MONGO_URI = "mongodb+srv://rajkumarb2308_db_user:rgfobjMajgiVhxpd@aura-crypt.innejxe.mongodb.net/?appName=aura-crypt"
+MONGO_URI = "os.getenv("MONGO_URI")"
 
 try:
     client = MongoClient(MONGO_URI)
@@ -96,3 +96,4 @@ def receive_data(msg_id: str):
         raise HTTPException(status_code=404, detail="SIGNAL NOT FOUND OR EXPIRED")
 
     return {"visual_data": record["visual_data"]}
+
