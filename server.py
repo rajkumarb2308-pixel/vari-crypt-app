@@ -14,7 +14,7 @@ app = FastAPI()
 # ==========================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://vari-crypt-app.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -96,4 +96,5 @@ def receive_data(msg_id: str):
         raise HTTPException(status_code=404, detail="SIGNAL NOT FOUND OR EXPIRED")
 
     return {"visual_data": record["visual_data"]}
+
 
