@@ -1,21 +1,42 @@
 # ==========================================
-# 🚀 SERVER.PY (FASTAPI BACKEND - PRODUCTION READY)
+# 🚀 VARI-CRYPT SERVER V2 (JWT + TTL READY)
 # ==========================================
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
 import bcrypt
 import os
 import uuid
-from datetime import datetime
+
+# =============================
+# 🔐 CONFIG
+# =============================
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey_change_this")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+MONGO_URI = os.getenv("MONGO_URI")
+
+if not MONGO_URI:
+    raise Exception("MONGO_URI not set")
+
+client = MongoClient(MONGO_URI)
+db = client["vari_crypt_db"]
+users_collection = db["users"]
+messages_collection = db["messages"]
+
+# Create TTL index (1 hour expiry)
+messages_collection.create_index(
+    [("createdAt", ASCENDING)],
+    expireAfterSeconds=3600
+)
 
 app = FastAPI()
 
-# ==========================================
-# 🌐 CORS CONFIG (SAFE FOR TOKEN-LESS API)
-# ==========================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,85 +45,91 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==========================================
-# 🛢 DATABASE CONNECTION (ENV SAFE)
-# ==========================================
-MONGO_URI = os.getenv("MONGO_URI")
-
-if not MONGO_URI:
-    raise Exception("❌ MONGO_URI environment variable not set")
-
-try:
-    client = MongoClient(MONGO_URI)
-    db = client["vari_crypt_db"]
-    users_collection = db["users"]
-    messages_collection = db["messages"]
-    print("✅ Connected to MongoDB Cloud!")
-except Exception as e:
-    raise Exception(f"❌ Database connection failed: {e}")
-
-# ==========================================
+# =============================
 # 📦 MODELS
-# ==========================================
+# =============================
 class AuthModel(BaseModel):
     identifier: str
     password: str
 
+class MessageModel(BaseModel):
+    visual_data: str
 
-# ==========================================
+
+# =============================
+# 🔐 JWT UTIL
+# =============================
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_token(auth_header: str = Header(None)):
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="TOKEN REQUIRED")
+
+    try:
+        scheme, token = auth_header.split()
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload["sub"]
+    except:
+        raise HTTPException(status_code=401, detail="INVALID TOKEN")
+
+
+# =============================
 # 🔐 AUTH ROUTES
-# ==========================================
+# =============================
 @app.post("/register")
-def register_user(user: AuthModel):
-    existing = users_collection.find_one({"identifier": user.identifier})
-    if existing:
-        raise HTTPException(status_code=400, detail="IDENTITY ALREADY EXISTS")
+def register(user: AuthModel):
+    if users_collection.find_one({"identifier": user.identifier}):
+        raise HTTPException(status_code=400, detail="IDENTITY EXISTS")
 
-    hashed_pw = bcrypt.hashpw(
-        user.password.encode("utf-8"),
+    hashed = bcrypt.hashpw(
+        user.password.encode(),
         bcrypt.gensalt()
-    ).decode("utf-8")  # store as string
+    ).decode()
 
     users_collection.insert_one({
         "identifier": user.identifier,
-        "password": hashed_pw,
-        "joined_at": datetime.utcnow()
+        "password": hashed,
+        "created_at": datetime.utcnow()
     })
 
-    return {"message": "IDENTITY ESTABLISHED"}
+    return {"message": "REGISTERED SUCCESSFULLY"}
 
 
 @app.post("/login")
-def login_user(creds: AuthModel):
-    user = users_collection.find_one({"identifier": creds.identifier})
+def login(user: AuthModel):
+    db_user = users_collection.find_one({"identifier": user.identifier})
 
-    if not user:
+    if not db_user:
         raise HTTPException(status_code=401, detail="USER NOT FOUND")
 
     if not bcrypt.checkpw(
-        creds.password.encode("utf-8"),
-        user["password"].encode("utf-8")
+        user.password.encode(),
+        db_user["password"].encode()
     ):
         raise HTTPException(status_code=401, detail="WRONG PASSWORD")
 
-    return {"user": user["identifier"]}
+    token = create_access_token({"sub": user.identifier})
+
+    return {"access_token": token, "token_type": "bearer"}
 
 
-# ==========================================
-# 📡 MESSAGE ROUTES
-# ==========================================
+# =============================
+# 📡 PROTECTED MESSAGE ROUTES
+# =============================
 @app.post("/send")
-def send_data(data: dict):
-    try:
-        visual_data = data["encrypted_payload"]["visual_data"]
-    except KeyError:
-        raise HTTPException(status_code=400, detail="INVALID PAYLOAD FORMAT")
+def send_message(data: MessageModel, user=Depends(verify_token)):
 
     msg_id = str(uuid.uuid4())[:8]
 
     messages_collection.insert_one({
         "msg_id": msg_id,
-        "visual_data": visual_data,
+        "visual_data": data.visual_data,
+        "owner": user,
         "createdAt": datetime.utcnow()
     })
 
@@ -110,24 +137,19 @@ def send_data(data: dict):
 
 
 @app.get("/receive/{msg_id}")
-def receive_data(msg_id: str):
-    record = messages_collection.find_one_and_delete({"msg_id": msg_id})
+def receive_message(msg_id: str, user=Depends(verify_token)):
+
+    record = messages_collection.find_one_and_delete({
+        "msg_id": msg_id,
+        "owner": user
+    })
 
     if not record:
-        raise HTTPException(status_code=404, detail="SIGNAL NOT FOUND OR EXPIRED")
+        raise HTTPException(status_code=404, detail="NOT FOUND OR EXPIRED")
 
     return {"visual_data": record["visual_data"]}
 
 
-# ==========================================
-# 🧪 HEALTH CHECK
-# ==========================================
 @app.get("/")
 def health():
-    return {"status": "Vari-Crypt Server is Live (Mode: cloud)"}
-
-
-# Prevent 405 logs from Render health checks
-@app.head("/")
-def head_health():
-    return {"status": "OK"}
+    return {"status": "Vari-Crypt Server V2 Running"}
