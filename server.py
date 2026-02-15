@@ -12,7 +12,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://vari-crypt.streamlit.app"],  # Change in production
+    allow_origins=["*"],  # Change in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -110,6 +110,7 @@ def login(user: UserLogin):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
