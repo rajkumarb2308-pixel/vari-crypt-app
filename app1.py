@@ -1,5 +1,5 @@
 # ==================================
-# 🌌 VARI-CRYPT: EVENT HORIZON
+# 🌌 VARI-CRYPT: EVENT HORIZON (V2 JWT)
 # ==================================
 
 import streamlit as st
@@ -10,10 +10,10 @@ from stego_engine import StegoEngine
 from audio_engine import AudioStego
 
 # ==============================
-# 🔗 BACKEND SERVER
+# 🔗 BACKEND CONFIG
 # ==============================
 SERVER_URL = "https://vari-crypt-app.onrender.com"
-REQUEST_TIMEOUT = 60  # Increased for Render cold start
+REQUEST_TIMEOUT = 60  # Render cold start safe
 
 # ==============================
 # 🚀 ENGINE INITIALIZATION
@@ -36,11 +36,13 @@ st.set_page_config(
 st.title("VARI-CRYPT: EVENT HORIZON")
 
 # ==============================
-# 🔐 SESSION STATE
+# 🔐 SESSION STATE INIT
 # ==============================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
+if "token" not in st.session_state:
+    st.session_state.token = None
 
 # ==========================================
 # 🔐 LOGIN / REGISTER
@@ -52,7 +54,7 @@ if not st.session_state.logged_in:
     with col2:
         tab1, tab2 = st.tabs(["🚀 LOGIN", "📝 REGISTER"])
 
-        # LOGIN
+        # ================= LOGIN =================
         with tab1:
             l_id = st.text_input("PILOT ID")
             l_pw = st.text_input("ACCESS CODE", type="password")
@@ -69,19 +71,21 @@ if not st.session_state.logged_in:
                         )
 
                         if res.status_code == 200:
+                            token = res.json()["access_token"]
+                            st.session_state.token = token
                             st.session_state.logged_in = True
                             st.session_state.user_email = l_id
                             st.success("ACCESS GRANTED")
                             st.rerun()
                         else:
-                            st.error(f"{res.status_code} - {res.text}")
+                            st.error(res.json().get("detail", res.text))
 
                     except requests.exceptions.Timeout:
-                        st.error("Server waking up... please wait and try again.")
+                        st.error("Server waking up... please wait 30-40 seconds and try again.")
                     except Exception as e:
                         st.error(f"Server error: {e}")
 
-        # REGISTER
+        # ================= REGISTER =================
         with tab2:
             r_id = st.text_input("NEW PILOT ID")
             r_pw = st.text_input("SET ACCESS CODE", type="password")
@@ -100,7 +104,7 @@ if not st.session_state.logged_in:
                         if res.status_code == 200:
                             st.success("IDENTITY ESTABLISHED. Please login.")
                         else:
-                            st.error(f"{res.status_code} - {res.text}")
+                            st.error(res.json().get("detail", res.text))
 
                     except requests.exceptions.Timeout:
                         st.error("Server waking up... please wait and try again.")
@@ -109,9 +113,13 @@ if not st.session_state.logged_in:
 
 
 # ==========================================
-# 🌌 MAIN APPLICATION
+# 🌌 MAIN APPLICATION (JWT PROTECTED)
 # ==========================================
 else:
+
+    headers = {
+        "Authorization": f"Bearer {st.session_state.token}"
+    }
 
     with st.sidebar:
         st.markdown(f"### 👨‍🚀 PILOT: `{st.session_state.user_email}`")
@@ -119,66 +127,90 @@ else:
 
         if st.button("LOGOUT / EJECT"):
             st.session_state.logged_in = False
+            st.session_state.token = None
             st.rerun()
 
     # ==========================================
-    # 📡 ENCODE
+    # 📡 ENCODE SIGNAL
     # ==========================================
     if operation == "📡 ENCODE SIGNAL":
+
+        st.subheader("// GENERATE SECURE TRANSMISSION")
 
         msg = st.text_area("PAYLOAD DATA (MAX 20 WORDS)")
         pwd = st.text_input("ENCRYPTION KEY", type="password")
 
         if st.button("SEND SIGNAL"):
+
             if not msg or not pwd:
                 st.warning("Message and key required.")
             else:
                 try:
+                    # Encrypt
                     s, n, t, c = st.session_state.crypto.encrypt_data(msg, pwd)
                     full_hex = (s + n + t + c).hex()
 
+                    # Send to server (JWT protected)
                     res = requests.post(
                         f"{SERVER_URL}/send",
-                        json={"encrypted_payload": {"visual_data": full_hex}},
+                        json={"visual_data": full_hex},
+                        headers=headers,
                         timeout=REQUEST_TIMEOUT
                     )
 
                     if res.status_code == 200:
                         st.success(f"MISSION ID: {res.json()['msg_id']}")
+                    elif res.status_code == 401:
+                        st.error("Session expired. Please login again.")
+                        st.session_state.logged_in = False
+                        st.rerun()
                     else:
-                        st.error(f"{res.status_code} - {res.text}")
+                        st.error(res.json().get("detail", res.text))
 
                 except Exception as e:
                     st.error(f"Encryption failed: {e}")
 
     # ==========================================
-    # 📥 DECODE
+    # 📥 DECODE SIGNAL
     # ==========================================
     else:
+
+        st.subheader("// RECOVER SIGNAL")
 
         mission_id = st.text_input("MISSION ID")
         decrypt_key = st.text_input("DECRYPT KEY", type="password")
 
-        if st.button("PULL DATA") and mission_id:
-            try:
-                res = requests.get(
-                    f"{SERVER_URL}/receive/{mission_id}",
-                    timeout=REQUEST_TIMEOUT
-                )
+        if st.button("PULL DATA"):
 
-                if res.status_code == 200:
-                    extracted_hex = res.json()["visual_data"]
-                    b = bytes.fromhex(extracted_hex)
-
-                    decrypted = st.session_state.crypto.decrypt_data(
-                        b[:16], b[16:32], b[32:48], b[48:], decrypt_key
+            if not mission_id:
+                st.warning("Enter Mission ID")
+            else:
+                try:
+                    res = requests.get(
+                        f"{SERVER_URL}/receive/{mission_id}",
+                        headers=headers,
+                        timeout=REQUEST_TIMEOUT
                     )
 
-                    st.success(f"🔓 RECOVERED: {decrypted}")
-                else:
-                    st.error(f"{res.status_code} - {res.text}")
+                    if res.status_code == 200:
+                        extracted_hex = res.json()["visual_data"]
+                        b = bytes.fromhex(extracted_hex)
 
-            except requests.exceptions.Timeout:
-                st.error("Server waking up... try again.")
-            except Exception as e:
-                st.error(f"Error: {e}")
+                        decrypted = st.session_state.crypto.decrypt_data(
+                            b[:16], b[16:32], b[32:48], b[48:], decrypt_key
+                        )
+
+                        st.success(f"🔓 RECOVERED: {decrypted}")
+                        st.balloons()
+
+                    elif res.status_code == 401:
+                        st.error("Session expired. Please login again.")
+                        st.session_state.logged_in = False
+                        st.rerun()
+                    else:
+                        st.error(res.json().get("detail", res.text))
+
+                except requests.exceptions.Timeout:
+                    st.error("Server waking up... please retry.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
