@@ -2,54 +2,91 @@ from stegano import lsb
 from PIL import Image, ImageDraw
 import io
 import random
+import math
+import requests  # Needed to fetch nature images
+
 
 class StegoEngine:
-    def generate_cosmic_carrier(self):
-        """Generates a unique high-fidelity 500x500 nebula carrier."""
-        img = Image.new('RGB', (500, 500), color=(0, 0, 0))
+    def _fetch_online_nature_image(self):
+        """
+        Attempts to fetch a random high-quality wildlife/nature image.
+        Returns PIL Image or None if internet fails.
+        """
+        try:
+            # Keywords to ensure we get nature shots
+            keywords = random.choice(["wildlife", "tiger", "forest", "eagle", "ocean", "mountain"])
+            # Request 800x600 image from LoremFlickr
+            url = f"https://loremflickr.com/800/600/{keywords}"
+
+            # 3-second timeout prevents hanging
+            response = requests.get(url, timeout=3)
+
+            if response.status_code == 200:
+                img_bytes = io.BytesIO(response.content)
+                return Image.open(img_bytes).convert("RGB")
+            else:
+                return None
+        except Exception:
+            return None  # Internet down or blocked
+
+    def _generate_cosmic_fallback(self, width=600, height=600):
+        """
+        Fallback: Generates a starfield if we can't get a real photo.
+        """
+        img = Image.new('RGB', (width, height), color=(0, 0, 0))
         draw = ImageDraw.Draw(img)
-        # Random Stars
-        for _ in range(350):
-            x, y = random.randint(0, 499), random.randint(0, 499)
-            brightness = random.randint(180, 255)
-            draw.point((x, y), fill=(brightness, brightness, brightness))
-        # Nebula Gas
-        for _ in range(6):
-            center = (random.randint(50, 450), random.randint(50, 450))
-            radius = random.randint(40, 160)
-            color = random.choice([(15, 35, 70), (45, 15, 55), (20, 55, 45)])
-            draw.ellipse([center[0]-radius, center[1]-radius, center[0]+radius, center[1]+radius], fill=color)
+
+        # Stars
+        for _ in range(int(width * height * 0.002)):
+            x, y = random.randint(0, width - 1), random.randint(0, height - 1)
+            b = random.randint(150, 255)
+            draw.point((x, y), fill=(b, b, b))
+
+        # Nebulas
+        for _ in range(5):
+            x, y = random.randint(50, width - 50), random.randint(50, height - 50)
+            r = random.randint(40, 150)
+            color = random.choice([(20, 40, 80), (50, 20, 60), (20, 60, 40)])
+            draw.ellipse([x - r, y - r, x + r, y + r], fill=color)
         return img
 
     def hide_data(self, image_input, secret_hex, auto_generate=False):
         """
-        Universal Hiding Logic:
-        1. Accepts PNG, JPG, or JPEG.
-        2. Converts to RGB to standardize pixel data.
-        3. ALWAYS saves as PNG to preserve the hidden secret.
+        Universal Hide: Handles Uploads, Auto-Gen, and Resizing.
         """
+        # --- STEP 1: ACQUIRE IMAGE ---
         if auto_generate:
-            img = self.generate_cosmic_carrier()
+            img = self._fetch_online_nature_image()
+            if img is None:
+                img = self._generate_cosmic_fallback()
         else:
-            # .convert("RGB") is the fix that allows JPGs to work perfectly
+            # Handle UploadedFile from Streamlit
             img = Image.open(image_input).convert("RGB")
-            
-        # Hide the encrypted hex string
-        secret_img = lsb.hide(img, secret_hex)
-        
-        # Save to buffer as PNG (Lossless)
-        buf = io.BytesIO()
-        secret_img.save(buf, format="PNG")
-        return buf.getvalue()
+
+        # --- STEP 2: SMART RESIZE ---
+        # LSB needs space. We calculate if the image is big enough.
+        current_pixels = img.width * img.height
+        needed_pixels = len(secret_hex) * 4  # Safety margin
+
+        if current_pixels < needed_pixels:
+            scale = math.ceil(math.sqrt(needed_pixels / current_pixels))
+            scale = max(scale, 1.1)  # Scale up at least 10%
+            new_size = (int(img.width * scale), int(img.height * scale))
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+        # --- STEP 3: HIDE DATA ---
+        try:
+            secret_img = lsb.hide(img, secret_hex)
+
+            buf = io.BytesIO()
+            secret_img.save(buf, format="PNG")
+            return buf.getvalue()
+        except Exception as e:
+            raise ValueError(f"Steganography encoding failed: {str(e)}")
 
     def reveal_data(self, image_file):
-        """
-        Universal Reveal Logic:
-        Works on both uploaded PNGs and converted JPG-to-PNG carriers.
-        """
         try:
-            # Convert to RGB ensures we read the pixels exactly as they were written
             img = Image.open(image_file).convert("RGB")
             return lsb.reveal(img)
         except Exception:
-            raise ValueError("No cosmic data found. Ensure image is a Vari-Crypt carrier.")
+            raise ValueError("No hidden data found in this image.")
