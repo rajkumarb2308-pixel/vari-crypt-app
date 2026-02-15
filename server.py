@@ -27,7 +27,7 @@ app.add_middleware(
 # ==========================================
 # 🛢 DATABASE CONNECTION (PRODUCTION SAFE)
 # ==========================================
-MONGO_URI = os.getenv("MONGO_URI")
+MONGO_URI = "mongodb+srv://rajkumarb2308_db_user:rgfobjMajgiVhxpd@aura-crypt.innejxe.mongodb.net/?appName=aura-crypt"
 
 if not MONGO_URI:
     raise Exception("❌ MONGO_URI not set in environment variables")
@@ -114,3 +114,4 @@ def receive_data(msg_id: str):
 @app.get("/")
 def health():
     return {"status": "SERVER RUNNING"}
+
