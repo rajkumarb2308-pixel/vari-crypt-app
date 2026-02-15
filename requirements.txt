@@ -8,3 +8,5 @@ pymongo
 dnspython
 Pillow
 stegano
+bcrypt
+
