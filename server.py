@@ -1,5 +1,5 @@
 # ==========================================
-# 🚀 SERVER.PY (FASTAPI BACKEND)
+# 🚀 SERVER.PY (FASTAPI BACKEND - PRODUCTION READY)
 # ==========================================
 
 from fastapi import FastAPI, HTTPException
@@ -14,32 +14,32 @@ from datetime import datetime
 app = FastAPI()
 
 # ==========================================
-# 🌐 CORS CONFIG (SAFE VERSION)
+# 🌐 CORS CONFIG (SAFE FOR TOKEN-LESS API)
 # ==========================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Safe because we are NOT using auth cookies
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ==========================================
-# 🛢 DATABASE CONNECTION (PRODUCTION SAFE)
+# 🛢 DATABASE CONNECTION (ENV SAFE)
 # ==========================================
-MONGO_URI = "mongodb+srv://rajkumarb2308_db_user:rgfobjMajgiVhxpd@aura-crypt.innejxe.mongodb.net/?appName=aura-crypt"
+MONGO_URI = os.getenv("MONGO_URI")
 
 if not MONGO_URI:
-    raise Exception("❌ MONGO_URI not set in environment variables")
+    raise Exception("❌ MONGO_URI environment variable not set")
 
 try:
     client = MongoClient(MONGO_URI)
     db = client["vari_crypt_db"]
     users_collection = db["users"]
     messages_collection = db["messages"]
-    print("✅ CONNECTED TO MONGODB")
+    print("✅ Connected to MongoDB Cloud!")
 except Exception as e:
-    raise Exception(f"❌ DATABASE CONNECTION FAILED: {e}")
+    raise Exception(f"❌ Database connection failed: {e}")
 
 # ==========================================
 # 📦 MODELS
@@ -58,7 +58,10 @@ def register_user(user: AuthModel):
     if existing:
         raise HTTPException(status_code=400, detail="IDENTITY ALREADY EXISTS")
 
-    hashed_pw = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
+    hashed_pw = bcrypt.hashpw(
+        user.password.encode("utf-8"),
+        bcrypt.gensalt()
+    ).decode("utf-8")  # store as string
 
     users_collection.insert_one({
         "identifier": user.identifier,
@@ -76,22 +79,30 @@ def login_user(creds: AuthModel):
     if not user:
         raise HTTPException(status_code=401, detail="USER NOT FOUND")
 
-    if not bcrypt.checkpw(creds.password.encode("utf-8"), user["password"]):
+    if not bcrypt.checkpw(
+        creds.password.encode("utf-8"),
+        user["password"].encode("utf-8")
+    ):
         raise HTTPException(status_code=401, detail="WRONG PASSWORD")
 
     return {"user": user["identifier"]}
 
 
 # ==========================================
-# 📡 MESSAGE ROUTES (UNCHANGED STRUCTURE)
+# 📡 MESSAGE ROUTES
 # ==========================================
 @app.post("/send")
 def send_data(data: dict):
+    try:
+        visual_data = data["encrypted_payload"]["visual_data"]
+    except KeyError:
+        raise HTTPException(status_code=400, detail="INVALID PAYLOAD FORMAT")
+
     msg_id = str(uuid.uuid4())[:8]
 
     messages_collection.insert_one({
         "msg_id": msg_id,
-        "visual_data": data['encrypted_payload']['visual_data'],
+        "visual_data": visual_data,
         "createdAt": datetime.utcnow()
     })
 
@@ -113,5 +124,10 @@ def receive_data(msg_id: str):
 # ==========================================
 @app.get("/")
 def health():
-    return {"status": "SERVER RUNNING"}
+    return {"status": "Vari-Crypt Server is Live (Mode: cloud)"}
 
+
+# Prevent 405 logs from Render health checks
+@app.head("/")
+def head_health():
+    return {"status": "OK"}
