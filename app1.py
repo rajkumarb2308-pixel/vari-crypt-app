@@ -15,7 +15,7 @@ if 'engines_loaded' not in st.session_state:
     st.session_state.audio_stego = AudioStego()
     st.session_state.engines_loaded = True
 
-SERVER_URL = "https://vari-crypt-app.onrender.com"
+SERVER_URL = "http://127.0.0.1:8000"
 
 # ==========================================
 # 🌌 THEME: ENHANCED NEBULA (UI ONLY)
@@ -89,127 +89,98 @@ st.markdown("""
 
 st.title("VARI-CRYPT: EVENT HORIZON")
 
-# --- IDENTITY GATE ---
-if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+# ==========================================
+# 🛰️ MISSION CONTROL (NO LOGIN REQUIRED)
+# ==========================================
 
-if not st.session_state.logged_in:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        t1, t2 = st.tabs(["🚀 LOGIN", "📝 REGISTER"])
-        with t1:
-            l_id = st.text_input("PILOT ID", key="l_id")
-            l_pw = st.text_input("ACCESS CODE", type="password", key="l_pw")
-            if st.button("INITIATE DOCKING"):
-                try:
-                    res = requests.post(f"{SERVER_URL}/login", json={"identifier": l_id, "password": l_pw})
-                    if res.status_code == 200:
-                        st.session_state.logged_in, st.session_state.user_email = True, l_id
-                        st.rerun()
-                    else:
-                        st.error("ACCESS DENIED.")
-                except:
-                    st.error("SERVER OFFLINE.")
-        with t2:
-            r_id = st.text_input("NEW PILOT ID", key="r_id")
-            r_pw = st.text_input("SET ACCESS CODE", type="password", key="r_pw")
-            if st.button("CREATE IDENTITY"):
-                requests.post(f"{SERVER_URL}/register", json={"identifier": r_id, "password": r_pw})
-                st.success("IDENTITY LOGGED.")
+with st.sidebar:
+    st.markdown("### 👨‍🚀 STATUS: `ACTIVE`")
+    op = st.radio("NAVIGATION", ["📡 ENCODE SIGNAL", "📥 DECODE SIGNAL"])
 
-# --- MISSION CONTROL ---
+if op == "📡 ENCODE SIGNAL":
+    st.subheader("// GENERATE SECURE TRANSMISSION")
+    msg = st.text_area("PAYLOAD DATA (MAX 20 WORDS)")
+    pwd = st.text_input("ENCRYPTION KEY", type="password")
+
+    mode = st.selectbox("PROTOCOL",
+                        ["WILDLIFE AUTO-GEN (IMAGE)", "EMOJI MAPPING", "MANUAL IMAGE UPLOAD", "AUDIO ENCRYPTION"])
+
+    up_file = None
+    if "MANUAL" in mode:
+        up_file = st.file_uploader("UPLOAD IMAGE", type=["png", "jpg"])
+    elif "AUDIO" in mode:
+        up_file = st.file_uploader("UPLOAD AUDIO", type=["wav", "mp3"])
+
+    if st.button("SEND SIGNAL"):
+        try:
+            s, n, t, c = st.session_state.crypto.encrypt_data(msg, pwd)
+            f_hex = (s + n + t + c).hex()
+
+            if "EMOJI" in mode:
+                output = st.session_state.mapper.map_ciphertext(bytes.fromhex(f_hex), pwd)
+                st.code(output, language="text")
+                sync_data = output
+            elif "WILDLIFE" in mode:
+                data = st.session_state.stego.hide_data(None, f_hex, use_wildlife=True)
+                st.image(data, caption="WILDLIFE ARTIFACT")
+                st.download_button("SAVE", data, "wildlife.png")
+                sync_data = f_hex
+            elif "MANUAL" in mode and up_file:
+                data = st.session_state.stego.hide_data(up_file, f_hex)
+                st.image(data)
+                st.download_button("SAVE", data, "mission.png")
+                sync_data = f_hex
+            elif "AUDIO" in mode and up_file:
+                data = st.session_state.audio_stego.hide_data(up_file, f_hex)
+                st.audio(data)
+                st.download_button("SAVE", data, "signal.wav")
+                sync_data = f_hex
+
+            res = requests.post(f"{SERVER_URL}/send", json={"encrypted_payload": {"visual_data": sync_data}})
+            if res.status_code == 200:
+                st.info(f"MISSION ID: {res.json().get('msg_id')}")
+            st.success("TRANSMITTED.")
+        except Exception as e:
+            st.error(f"FAIL: {e}")
+
 else:
-    with st.sidebar:
-        st.markdown(f"### 👨‍🚀 PILOT: `{st.session_state.user_email}`")
-        op = st.radio("NAVIGATION", ["📡 ENCODE SIGNAL", "📥 DECODE SIGNAL"])
-        if st.button("LOGOUT / EJECT"):
-            st.session_state.logged_in = False
-            st.rerun()
+    st.subheader("// RECOVER SIGNAL")
+    method = st.radio("SOURCE TYPE", ["CLOUD MISSION ID", "MANUAL EMOJI SYMBOLS", "IMAGE FILE", "AUDIO FILE"])
+    k = st.text_input("DECRYPT KEY", type="password")
 
-    if op == "📡 ENCODE SIGNAL":
-        st.subheader("// GENERATE SECURE TRANSMISSION")
-        msg = st.text_area("PAYLOAD DATA (MAX 20 WORDS)")
-        pwd = st.text_input("ENCRYPTION KEY", type="password")
+    extracted_hex = None
 
-        mode = st.selectbox("PROTOCOL",
-                            ["WILDLIFE AUTO-GEN (IMAGE)", "EMOJI MAPPING", "MANUAL IMAGE UPLOAD", "AUDIO ENCRYPTION"])
+    if method == "CLOUD MISSION ID":
+        mid = st.text_input("MISSION ID")
+        if st.button("PULL DATA") and mid:
+            res = requests.get(f"{SERVER_URL}/receive/{mid}")
+            if res.status_code == 200:
+                raw_data = res.json()['visual_data']
+                extracted_hex = st.session_state.mapper.unmap_ciphertext(raw_data, k).hex() if any(
+                    c in raw_data for c in "ΑΒΓΔ") else raw_data
+            else:
+                st.error("NOT FOUND.")
 
-        up_file = None
-        if "MANUAL" in mode:
-            up_file = st.file_uploader("UPLOAD IMAGE", type=["png", "jpg"])
-        elif "AUDIO" in mode:
-            up_file = st.file_uploader("UPLOAD AUDIO", type=["wav", "mp3"])
+    elif method == "MANUAL EMOJI SYMBOLS":
+        emoji_input = st.text_area("PASTE SYMBOLS")
+        if st.button("TRANSLATE"):
+            extracted_hex = st.session_state.mapper.unmap_ciphertext(emoji_input, k).hex()
 
-        if st.button("SEND SIGNAL"):
-            try:
-                s, n, t, c = st.session_state.crypto.encrypt_data(msg, pwd)
-                f_hex = (s + n + t + c).hex()
+    elif method == "IMAGE FILE":
+        up_file = st.file_uploader("UPLOAD ARTIFACT", type=["png", "jpg"])
+        if st.button("SCAN") and up_file:
+            extracted_hex = st.session_state.stego.reveal_data(up_file)
 
-                if "EMOJI" in mode:
-                    output = st.session_state.mapper.map_ciphertext(bytes.fromhex(f_hex), pwd)
-                    st.code(output, language="text")
-                    sync_data = output
-                elif "WILDLIFE" in mode:
-                    data = st.session_state.stego.hide_data(None, f_hex, use_wildlife=True)
-                    st.image(data, caption="WILDLIFE ARTIFACT");
-                    st.download_button("SAVE", data, "wildlife.png")
-                    sync_data = f_hex
-                elif "MANUAL" in mode and up_file:
-                    data = st.session_state.stego.hide_data(up_file, f_hex)
-                    st.image(data);
-                    st.download_button("SAVE", data, "mission.png")
-                    sync_data = f_hex
-                elif "AUDIO" in mode and up_file:
-                    data = st.session_state.audio_stego.hide_data(up_file, f_hex)
-                    st.audio(data);
-                    st.download_button("SAVE", data, "signal.wav")
-                    sync_data = f_hex
+    elif method == "AUDIO FILE":
+        up_file = st.file_uploader("UPLOAD SIGNAL", type=["wav", "mp3"])
+        if st.button("ANALYZE") and up_file:
+            extracted_hex = st.session_state.audio_stego.reveal_data(up_file)
 
-                res = requests.post(f"{SERVER_URL}/send", json={"encrypted_payload": {"visual_data": sync_data}})
-                if res.status_code == 200:
-                    st.info(f"MISSION ID: {res.json().get('msg_id')}")
-                st.success("TRANSMITTED.")
-            except Exception as e:
-                st.error(f"FAIL: {e}")
-
-    else:
-        st.subheader("// RECOVER SIGNAL")
-        method = st.radio("SOURCE TYPE", ["CLOUD MISSION ID", "MANUAL EMOJI SYMBOLS", "IMAGE FILE", "AUDIO FILE"])
-        k = st.text_input("DECRYPT KEY", type="password")
-
-        extracted_hex = None
-
-        if method == "CLOUD MISSION ID":
-            mid = st.text_input("MISSION ID")
-            if st.button("PULL DATA") and mid:
-                res = requests.get(f"{SERVER_URL}/receive/{mid}")
-                if res.status_code == 200:
-                    raw_data = res.json()['visual_data']
-                    extracted_hex = st.session_state.mapper.unmap_ciphertext(raw_data, k).hex() if any(
-                        c in raw_data for c in "ΑΒΓΔ") else raw_data
-                else:
-                    st.error("NOT FOUND.")
-
-        elif method == "MANUAL EMOJI SYMBOLS":
-            emoji_input = st.text_area("PASTE SYMBOLS")
-            if st.button("TRANSLATE"):
-                extracted_hex = st.session_state.mapper.unmap_ciphertext(emoji_input, k).hex()
-
-        elif method == "IMAGE FILE":
-            up_file = st.file_uploader("UPLOAD ARTIFACT", type=["png", "jpg"])
-            if st.button("SCAN") and up_file:
-                extracted_hex = st.session_state.stego.reveal_data(up_file)
-
-        elif method == "AUDIO FILE":
-            up_file = st.file_uploader("UPLOAD SIGNAL", type=["wav", "mp3"])
-            if st.button("ANALYZE") and up_file:
-                extracted_hex = st.session_state.audio_stego.reveal_data(up_file)
-
-        if extracted_hex:
-            try:
-                b = bytes.fromhex(extracted_hex)
-                dec = st.session_state.crypto.decrypt_data(b[:16], b[16:32], b[32:48], b[48:], k)
-                st.success(f"🔓 RECOVERED: {dec}")
-                st.balloons()
-            except:
-                st.error("DECRYPTION FAILED.")
-
+    if extracted_hex:
+        try:
+            b = bytes.fromhex(extracted_hex)
+            dec = st.session_state.crypto.decrypt_data(b[:16], b[16:32], b[32:48], b[48:], k)
+            st.success(f"🔓 RECOVERED: {dec}")
+            st.balloons()
+        except:
+            st.error("DECRYPTION FAILED.")
