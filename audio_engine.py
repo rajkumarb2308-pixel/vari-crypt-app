@@ -8,121 +8,131 @@ import shutil
 class AudioStego:
     def _get_ffmpeg_path(self):
         """
-        Smart detection:
-        1. Checks for 'ffmpeg.exe' in the current folder (for your Laptop/Windows).
-        2. Falls back to system 'ffmpeg' (for Render/Cloud/Linux).
+        Smart detection for FFmpeg.
         """
         local_path = os.path.join(os.getcwd(), "ffmpeg.exe")
-
-        # Priority 1: Use the local file if it exists (Windows Local)
         if os.path.exists(local_path):
             return local_path
-
-        # Priority 2: Use the system command (Cloud / Linux)
         if shutil.which("ffmpeg"):
             return "ffmpeg"
-
-        # Fallback: Just try the command and hope for the best
         return "ffmpeg"
 
     def hide_data(self, audio_file_obj, secret_hex):
         ffmpeg_cmd = self._get_ffmpeg_path()
+        temp_in = "temp_input_audio"
+        temp_wav = "temp_clean.wav"
 
         try:
-            # 1. WRITE: Save the uploaded file to disk so FFmpeg can read it
-            with open("temp_input_audio", "wb") as f:
-                f.write(audio_file_obj.getbuffer())
+            # 1. WRITE: Save the uploaded file to disk
+            with open(temp_in, "wb") as f:
+                f.write(audio_file_obj.read())
 
-            # 2. CONVERT: Use FFmpeg to clean the audio and convert to WAV
-            # -y: Overwrite output
-            # -ar 44100: Standard CD quality sample rate
-            # -ac 2: Stereo
-            # -f wav: Force WAV format
+            # 2. CONVERT: Force audio to 16-bit PCM WAV (Required for wave module)
+            # -c:a pcm_s16le: Forces standard 16-bit audio (Critical fix)
             subprocess.run(
-                [ffmpeg_cmd, "-y", "-i", "temp_input_audio", "-ar", "44100", "-ac", "2", "-f", "wav", "temp_clean.wav"],
+                [ffmpeg_cmd, "-y", "-i", temp_in, "-c:a", "pcm_s16le", "-ar", "44100", "-ac", "2", "-f", "wav",
+                 temp_wav],
                 check=True,
-                stdout=subprocess.DEVNULL,  # Silence the logs
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
 
             # 3. READ: Load the clean WAV data
-            with wave.open("temp_clean.wav", "rb") as song:
+            with wave.open(temp_wav, "rb") as song:
                 params = song.getparams()
                 frames = bytearray(song.readframes(song.getnframes()))
 
-            # 4. ENCODE: Embed the secret hex string using LSB Steganography
-            # Add a terminator sequence so we know when the message stops
+            # 4. ENCODE: Embed the secret hex string using LSB
+            # Binary + 16-bit Terminator (1111111111111110)
             secret_bin = bin(int(secret_hex, 16))[2:].zfill(len(secret_hex) * 4) + '1111111111111110'
 
             if len(secret_bin) > len(frames):
-                raise ValueError(
-                    f"Audio file is too short! Needs {len(secret_bin)} bits, but only has {len(frames)} frames.")
+                raise ValueError("Audio file is too short to hold this message.")
 
+            # LSB Substitution
             for i in range(len(secret_bin)):
-                # Replace the Last Significant Bit (LSB) with our secret bit
                 frames[i] = (frames[i] & 254) | int(secret_bin[i])
 
-            # 5. SAVE: Write the modified frames to a memory buffer
+            # 5. SAVE: Write to memory buffer
             output_buffer = io.BytesIO()
             with wave.open(output_buffer, 'wb') as fd:
                 fd.setparams(params)
                 fd.writeframes(frames)
 
-            # 6. CLEANUP: Delete temp files
+            output_buffer.seek(0)  # Reset pointer to start
             self._cleanup()
-
             return output_buffer.getvalue()
 
         except subprocess.CalledProcessError:
             self._cleanup()
-            raise Exception("FFmpeg conversion failed. The audio file might be corrupt.")
+            raise Exception("FFmpeg failed. Please install FFmpeg or check input file.")
         except Exception as e:
             self._cleanup()
             raise Exception(f"Encryption Error: {str(e)}")
 
     def reveal_data(self, audio_file_obj):
         ffmpeg_cmd = self._get_ffmpeg_path()
+        temp_in = "temp_decode_input.wav"  # Assume WAV first
+        temp_converted = "temp_converted.wav"
+
         try:
             # 1. WRITE: Save uploaded file
-            with open("temp_decode_input", "wb") as f:
-                f.write(audio_file_obj.getbuffer())
+            file_bytes = audio_file_obj.read()
+            with open(temp_in, "wb") as f:
+                f.write(file_bytes)
 
-            # 2. CONVERT: Standardize to WAV (fixes issues with different encodings)
-            subprocess.run(
-                [ffmpeg_cmd, "-y", "-i", "temp_decode_input", "-ar", "44100", "-ac", "2", "-f", "wav",
-                 "temp_decode.wav"],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
+            frames = None
 
-            # 3. READ: Load frames
-            with wave.open("temp_decode.wav", "rb") as song:
-                frames = bytearray(song.readframes(song.getnframes()))
+            # 2. ATTEMPT DIRECT READ (Critical Fix)
+            # Try to read as WAV immediately. If it works, DO NOT use FFmpeg.
+            # Using FFmpeg here would re-encode and destroy the LSBs.
+            try:
+                with wave.open(temp_in, "rb") as song:
+                    frames = bytearray(song.readframes(song.getnframes()))
+            except wave.Error:
+                # 3. FALLBACK: Only convert if it's NOT a valid WAV (e.g. user uploaded mp3)
+                # Note: Data hidden in MP3 is likely lost, but this prevents crashing.
+                subprocess.run(
+                    [ffmpeg_cmd, "-y", "-i", temp_in, "-c:a", "pcm_s16le", "-ar", "44100", "-ac", "2", "-f", "wav",
+                     temp_converted],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                with wave.open(temp_converted, "rb") as song:
+                    frames = bytearray(song.readframes(song.getnframes()))
 
-            # 4. DECODE: Extract LSBs until terminator is found
-            extracted = ""
+            if not frames:
+                return None
+
+            # 4. DECODE: Extract LSBs
+            extracted_bin = ""
+            terminator = "1111111111111110"
+
             for i in range(len(frames)):
-                extracted += str(frames[i] & 1)
-                if extracted.endswith('1111111111111110'):
+                extracted_bin += str(frames[i] & 1)
+                # Optimization: Check terminator every 16 bits to save time
+                if len(extracted_bin) >= 16 and extracted_bin[-16:] == terminator:
+                    extracted_bin = extracted_bin[:-16]  # Remove terminator
                     break
+            else:
+                # If loop finishes without break, terminator wasn't found
+                self._cleanup()
+                return None
 
-            # 5. CLEANUP & RETURN
             self._cleanup()
 
-            # Remove terminator and convert binary back to hex
-            bits = extracted[:-16]
-            if not bits: return None
+            # 5. Convert Binary to Hex
+            if not extracted_bin: return None
+            return hex(int(extracted_bin, 2))[2:]
 
-            return hex(int(bits, 2))[2:]
-
-        except Exception:
+        except Exception as e:
             self._cleanup()
             return None
 
     def _cleanup(self):
-        """Removes temporary files to keep the server clean."""
-        temp_files = ["temp_input_audio", "temp_clean.wav", "temp_decode_input", "temp_decode.wav"]
+        """Removes temporary files."""
+        temp_files = ["temp_input_audio", "temp_clean.wav", "temp_decode_input.wav", "temp_converted.wav"]
         for f in temp_files:
             if os.path.exists(f):
                 try:
