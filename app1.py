@@ -91,7 +91,7 @@ if 'engines_loaded' not in st.session_state:
     st.session_state.audio_stego = AudioStego()
     st.session_state.engines_loaded = True
 
-SERVER_URL = "http://127.0.0.1:8000"
+SERVER_URL = "https://vari-crypt-app.onrender.com"
 
 # ==========================================
 # 🌌 THEME SETUP
@@ -311,3 +311,4 @@ else:
                 st.balloons()
             except:
                 st.error("DECRYPTION FAILED.")
+
