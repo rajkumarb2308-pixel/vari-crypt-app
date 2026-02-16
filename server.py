@@ -1,13 +1,17 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr
-from passlib.context import CryptContext
+from pydantic import BaseModel
 from pymongo import MongoClient
+import bcrypt
 import os
+import uuid
+from datetime import datetime
 
 app = FastAPI()
 
-# ------------------ CORS ------------------
+# ==========================================
+# ⚙️ CONFIGURATION
+# ==========================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,79 +20,79 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ------------------ Password Hashing ------------------
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# ------------------ MongoDB Connection ------------------
-MONGO_URL = os.getenv("mongodb+srv://rajkumarb2308_db_user:NEW_PASSWORD@aura-crypt.innejxe.mongodb.net/aura_crypt?retryWrites=true&w=majority")
-
-if not MONGO_URL:
-    raise Exception("MONGO_URL not set")
+# ⚠️ DATABASE CONNECTION ⚠️
+# For local testing, you can paste your string here.
+# For production (Render), use os.getenv("MONGO_URI") to keep it safe.
+MONGO_URI = "mongodb+srv://rajkumarb2308_db_user:rgfobjMajgiVhxpd@aura-crypt.innejxe.mongodb.net/?appName=aura-crypt"
 
 try:
-    client = MongoClient(MONGO_URL, tls=True)
-    
-    # Force connection check
-    client.admin.command("ping")
-    
-    # Explicit DB selection
-    db = client["aura_crypt"]
-    users_collection = db["users"]
-
-    print("✅ MongoDB Connected")
-
+    client = MongoClient(MONGO_URI)
+    db = client.vari_crypt_db
+    users_collection = db.users
+    messages_collection = db.messages
+    print("✅ CONNECTED TO MONGODB ATLAS: aura-crypt")
 except Exception as e:
-    print("❌ MongoDB Connection Error:", e)
-    raise e
+    print(f"❌ DATABASE CONNECTION FAILED: {e}")
 
-# ------------------ Models ------------------
-class UserRegister(BaseModel):
-    username: str
-    email: EmailStr
+
+class AuthModel(BaseModel):
+    identifier: str
     password: str
 
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
 
-# ------------------ Routes ------------------
-@app.get("/")
-def root():
-    return {"message": "API Running Successfully 🚀"}
-
-
+# ==========================================
+# 🔐 AUTHENTICATION ROUTES
+# ==========================================
 @app.post("/register")
-def register(user: UserRegister):
-    existing = users_collection.find_one({"email": user.email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+def register_user(user: AuthModel):
+    # Check for duplicates
+    if users_collection.find_one({"identifier": user.identifier}):
+        raise HTTPException(status_code=400, detail="IDENTITY ALREADY EXISTS.")
 
-    hashed_password = pwd_context.hash(user.password)
+    # Hash password
+    hashed_pw = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt())
 
     users_collection.insert_one({
-        "username": user.username,
-        "email": user.email,
-        "password": hashed_password
+        "identifier": user.identifier,
+        "password": hashed_pw,
+        "joined_at": datetime.utcnow()
     })
-
-    return {
-        "status": "success",
-        "message": "User registered successfully"
-    }
+    return {"message": "IDENTITY ESTABLISHED"}
 
 
 @app.post("/login")
-def login(user: UserLogin):
-    db_user = users_collection.find_one({"email": user.email})
+def login_user(creds: AuthModel):
+    user = users_collection.find_one({"identifier": creds.identifier})
 
-    if not db_user:
-        raise HTTPException(status_code=400, detail="Invalid email or password")
+    if user and bcrypt.checkpw(creds.password.encode('utf-8'), user['password']):
+        return {"user": user["identifier"]}
 
-    if not pwd_context.verify(user.password, db_user["password"]):
-        raise HTTPException(status_code=400, detail="Invalid email or password")
+    raise HTTPException(status_code=401, detail="ACCESS DENIED")
 
-    return {
-        "status": "success",
-        "message": "Login successful"
-    }
 
+# ==========================================
+# 📡 DATA TRANSMISSION ROUTES
+# ==========================================
+@app.post("/send")
+def send_data(data: dict):
+    msg_id = str(uuid.uuid4())[:8]
+
+    # Store Encrypted Payload
+    messages_collection.insert_one({
+        "msg_id": msg_id,
+        "visual_data": data['encrypted_payload']['visual_data'],
+        "createdAt": datetime.utcnow()
+    })
+
+    return {"msg_id": msg_id}
+
+
+@app.get("/receive/{msg_id}")
+def receive_data(msg_id: str):
+    # Self-Destruct: Delete immediately after reading
+    record = messages_collection.find_one_and_delete({"msg_id": msg_id})
+
+    if not record:
+        raise HTTPException(status_code=404, detail="SIGNAL NOT FOUND OR EXPIRED")
+
+    return {"visual_data": record["visual_data"]}
