@@ -8,52 +8,65 @@ from PIL import Image
 class StegoEngine:
     def _get_wildlife_carrier(self):
         """
-        Uses a bulletproof multi-source approach to ensure high-quality
-        wildlife and nature images are always retrieved.
+        Fetches a beautiful nature/wildlife image using a robust list of
+        direct, high-speed source URLs. This avoids API blocking issues.
         """
-        # A curated list of direct-link high-resolution wildlife and nature images.
-        # Using direct IDs is much more reliable than 'random' endpoints.
-        diverse_links = [
-            "https://images.pexels.com/photos/33045/lion-wild-africa-african.jpg",
-            "https://images.pexels.com/photos/45201/kitty-cat-kitten-pet-45201.jpeg",
-            "https://images.pexels.com/photos/1450353/pexels-photo-1450353.jpeg",
-            "https://images.pexels.com/photos/358457/pexels-photo-358457.jpeg",
-            "https://images.pexels.com/photos/52713/tiger-face-tiger-wild-animal-52713.jpeg",
-            "https://images.pexels.com/photos/3408744/pexels-photo-3408744.jpeg",
-            "https://images.pexels.com/photos/1624496/pexels-photo-1624496.jpeg",
-            "https://images.pexels.com/photos/62627/pexels-photo-62627.jpeg"
+        # A massive list of high-quality, direct-link images (Nature & Wildlife).
+        # These include pre-set width parameters (?w=800) for faster loading.
+        reliable_sources = [
+            # --- Wildlife (Lions, Tigers, Wolves, Eagles) ---
+            "https://images.unsplash.com/photo-1546182990-dffeafbe841d?w=800&q=80",  # Lion
+            "https://images.unsplash.com/photo-1533730717864-73f74546b88f?w=800&q=80",  # Tiger
+            "https://images.unsplash.com/photo-1474511320721-79a0c259c277?w=800&q=80",  # Fox
+            "https://images.unsplash.com/photo-1452570053594-1b985d6ea82e?w=800&q=80",  # Bird
+            "https://images.unsplash.com/photo-1437622368342-7a3d73a34c8f?w=800&q=80",  # Turtle
+            "https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?w=800&q=80",  # Panda
+            "https://images.unsplash.com/photo-1504006833117-8886a36e6bf3?w=800&q=80",  # Elephant
+            "https://images.unsplash.com/photo-1456926631375-92c8ce872def?w=800&q=80",  # Leopard
+            "https://images.unsplash.com/photo-1495360019602-e001921678fe?w=800&q=80",  # Owl
+
+            # --- Landscapes (Mountains, Forests, Oceans) ---
+            "https://images.unsplash.com/photo-1470093851219-69951fcbb533?w=800&q=80",  # Forest
+            "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800&q=80",  # Lake
+            "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&q=80",  # Mountains
+            "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&q=80",  # Canyon
+            "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=800&q=80",  # Hills
+            "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80",  # Beach
+            "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&q=80",  # Snow
+            "https://images.unsplash.com/photo-1500829248997-712c73d07f67?w=800&q=80",  # Jungle
+
+            # --- Pexels Backups ---
+            "https://images.pexels.com/photos/414612/pexels-photo-414612.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "https://images.pexels.com/photos/3225517/pexels-photo-3225517.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "https://images.pexels.com/photos/15286/pexels-photo.jpg?auto=compress&cs=tinysrgb&w=800"
         ]
 
-        # We also keep a rotating "Random Nature" source as a secondary option
-        random_nature_sources = [
-            f"https://picsum.photos/800/600?nature={random.randint(1, 1000)}",
-            f"https://loremflickr.com/800/600/wildlife?lock={random.randint(1, 1000)}"
-        ]
+        # Randomly shuffle the list to ensure variety every time
+        random.shuffle(reliable_sources)
 
-        # Combine them for maximum variety
-        all_sources = diverse_links + random_nature_sources
-        random.shuffle(all_sources)
-
+        # User-Agent to look like a real browser (prevents 403 blocks)
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
 
-        for url in all_sources:
+        # Try up to 3 random images from the list before giving up
+        for i in range(3):
             try:
-                # Using a shorter timeout to cycle through sources quickly if one is blocked
+                url = reliable_sources[i]  # Pick the next one in the shuffled list
                 response = requests.get(url, headers=headers, timeout=5)
+
                 if response.status_code == 200:
                     img = Image.open(io.BytesIO(response.content)).convert("RGB")
-                    # Strict resizing to ensure the LSB math in app1.py remains perfect
+                    # Strict resize to 800x600 to ensure app.py compatibility
                     return img.resize((800, 600))
             except Exception:
-                continue
+                continue  # If one fails, loop to the next immediately
 
-        # ULTIMATE FALLBACK: If internet is completely out, generate a high-quality
-        # green/brown forest gradient that looks professional for a demo.
-        r = np.linspace(20, 40, 600 * 800).reshape(600, 800).astype(np.uint8)
-        g = np.linspace(60, 100, 600 * 800).reshape(600, 800).astype(np.uint8)
-        b = np.linspace(20, 40, 600 * 800).reshape(600, 800).astype(np.uint8)
+        # FALLBACK: If user has ZERO internet, generate a clean gradient
+        # This prevents the app from crashing.
+        r = np.linspace(20, 50, 600 * 800).reshape(600, 800).astype(np.uint8)
+        g = np.linspace(60, 120, 600 * 800).reshape(600, 800).astype(np.uint8)
+        b = np.linspace(20, 50, 600 * 800).reshape(600, 800).astype(np.uint8)
         return Image.fromarray(np.stack([r, g, b], axis=-1))
 
     def hide_data(self, image_file, hex_payload, use_wildlife=False):
